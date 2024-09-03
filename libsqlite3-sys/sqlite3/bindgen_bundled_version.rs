@@ -22,6 +22,13 @@ extern "C" {
         >,
     ) -> ::std::os::raw::c_int;
 }
+extern "C" {
+    pub fn sqlite3_decimal_init(
+        arg1: *mut sqlite3,
+        arg2: *mut *const ::std::os::raw::c_char,
+        arg3: *const sqlite3_api_routines,
+    ) -> ::std::os::raw::c_int;
+}
 
 pub const SQLITE_VERSION: &[u8; 7] = b"3.45.1\0";
 pub const SQLITE_VERSION_NUMBER: i32 = 3045001;
