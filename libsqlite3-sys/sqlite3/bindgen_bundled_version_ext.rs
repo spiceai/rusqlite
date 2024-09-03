@@ -7398,6 +7398,24 @@ pub unsafe fn sqlite3_set_clientdata(
     (fun)(arg1, arg2, arg3, arg4)
 }
 
+static __SQLITE3_DECIMAL_INIT: ::std::sync::atomic::AtomicPtr<()> = ::std::sync::atomic::AtomicPtr::new(
+    ::std::ptr::null_mut(),
+);
+pub unsafe fn sqlite3_decimal_init(
+    arg1: *mut sqlite3,
+    arg2: *mut *mut ::std::os::raw::c_char,
+    arg3: *const sqlite3_api_routines,
+) -> ::std::os::raw::c_int {
+    let ptr = __SQLITE3_DECIMAL_INIT.load(::std::sync::atomic::Ordering::Acquire);
+    assert!(! ptr.is_null(), "SQLite API not initialized or SQLite feature omitted");
+    let fun: unsafe extern "C" fn(
+        arg1: *mut sqlite3,
+        arg2: *mut *mut ::std::os::raw::c_char,
+        arg3: *const sqlite3_api_routines,
+    ) -> ::std::os::raw::c_int = ::std::mem::transmute(ptr);
+    (fun)(arg1, arg2, arg3)
+}
+
 /// Like SQLITE_EXTENSION_INIT2 macro
 pub unsafe fn rusqlite_extension_init2(
     p_api: *mut sqlite3_api_routines,
