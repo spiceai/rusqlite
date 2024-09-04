@@ -22,6 +22,13 @@ extern "C" {
         >,
     ) -> ::core::ffi::c_int;
 }
+extern "C" {
+    pub fn sqlite3_decimal_init(
+        arg1: *mut sqlite3,
+        arg2: *mut *const ::core::ffi::c_char,
+        arg3: *const sqlite3_api_routines,
+    ) -> ::core::ffi::c_int;
+}
 
 pub const SQLITE_VERSION: &::core::ffi::CStr = c"3.53.2";
 pub const SQLITE_VERSION_NUMBER: i32 = 3053002;

@@ -17,6 +17,8 @@ default = ["min_sqlite_version_3_34_1"]
 # Use bundled SQLite sources (instead of the one provided by your OS / distribution)
 bundled = ["cc", "bundled_bindings"]
 bundled-windows = ["cc", "bundled_bindings"]
+# Use bundled SQLite sources with the decimal extension included
+bundled-decimal = ["bundled"]
 # Use bundled SQLCipher sources
 bundled-sqlcipher = ["bundled"]
 bundled-sqlcipher-vendored-openssl = [

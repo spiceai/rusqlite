@@ -51,6 +51,8 @@ functions = []
 trace = []
 # Use bundled SQLite sources (instead of the one provided by your OS / distribution)
 bundled = ["libsqlite3-sys?/bundled", "modern_sqlite"]
+# Use bundled SQLite sources with the decimal extension included
+bundled-decimal = ["libsqlite3-sys?/bundled-decimal", "bundled"]
 # Use SQLCipher instead of SQLite
 bundled-sqlcipher = ["libsqlite3-sys?/bundled-sqlcipher", "bundled"]
 bundled-sqlcipher-vendored-openssl = [
