@@ -299,6 +299,11 @@ mod build_bundled {
         }
         println!("cargo:rerun-if-env-changed=LIBSQLITE3_FLAGS");
 
+        if cfg!(feature = "bundled-decimal") {
+            cfg.file(format!("{lib_name}/decimal.c"));
+            println!("cargo:rerun-if-changed={lib_name}/decimal.c");
+        }
+
         cfg.compile(lib_name);
 
         println!("cargo:lib_dir={out_dir}");

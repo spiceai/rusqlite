@@ -120,6 +120,7 @@ features](https://doc.rust-lang.org/cargo/reference/manifest.html#the-features-s
   and [`ToSql`](https://docs.rs/rusqlite/~0/rusqlite/types/trait.ToSql.html) for the
   `Url` type from the [`url` crate](https://crates.io/crates/url).
 * `bundled` uses a bundled version of SQLite.  This is a good option for cases where linking to SQLite is complicated, such as Windows.
+* `bundled-decimal` uses a bundled version of SQLite with the [decimal extension](https://github.com/sqlite/sqlite/blob/master/ext/misc/decimal.c) included.
 * `sqlcipher` looks for the SQLCipher library to link against instead of SQLite. This feature overrides `bundled`.
 * `bundled-sqlcipher` uses a bundled version of SQLCipher. This searches for and links against a system-installed crypto library to provide the crypto implementation.
 * `bundled-sqlcipher-vendored-openssl` allows using bundled-sqlcipher with a vendored version of OpenSSL (via the `openssl-sys` crate) as the crypto provider.

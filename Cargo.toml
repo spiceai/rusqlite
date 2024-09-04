@@ -46,6 +46,7 @@ trace = []
 # sqlite3_db_release_memory: 3.7.10 (2012-01-16)
 release_memory = []
 bundled = ["libsqlite3-sys/bundled", "modern_sqlite"]
+bundled-decimal = ["libsqlite3-sys/bundled-decimal", "bundled"]
 bundled-sqlcipher = ["libsqlite3-sys/bundled-sqlcipher", "bundled"]
 bundled-sqlcipher-vendored-openssl = ["libsqlite3-sys/bundled-sqlcipher-vendored-openssl", "bundled-sqlcipher"]
 buildtime_bindgen = ["libsqlite3-sys/buildtime_bindgen"]
