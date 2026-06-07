@@ -107,15 +107,15 @@ mod build_bundled {
         assert!(!(cfg!(feature = "bundled-windows") && !cfg!(feature = "bundled") && !win_target()),
             "This module should not be used: we're not on Windows and the bundled feature has not been enabled");
 
-        #[cfg(feature = "buildtime_bindgen")]
-        {
-            use super::{bindings, HeaderLocation};
-            let header = HeaderLocation::FromPath(lib_name.to_owned());
-            bindings::write_to_out_dir(header, out_path);
-        }
-        #[cfg(not(feature = "buildtime_bindgen"))]
-        {
-            super::copy_bindings(lib_name, "bindgen_bundled_version", out_path);
+        cfg_select! {
+            feature = "buildtime_bindgen" => {
+                use super::{bindings, HeaderLocation};
+                let header = HeaderLocation::FromPath(lib_name.to_owned());
+                bindings::write_to_out_dir(header, out_path);
+            }
+            _ => {
+                super::copy_bindings(lib_name, "bindgen_bundled_version", out_path);
+            }
         }
         println!("cargo:include={}/{lib_name}", env!("CARGO_MANIFEST_DIR"));
         println!("cargo:rerun-if-changed={lib_name}/sqlite3.c");
@@ -303,6 +303,11 @@ mod build_bundled {
             }
         }
         println!("cargo:rerun-if-env-changed=LIBSQLITE3_FLAGS");
+
+        if cfg!(feature = "bundled-decimal") {
+            cfg.file(format!("{lib_name}/decimal.c"));
+            println!("cargo:rerun-if-changed={lib_name}/decimal.c");
+        }
 
         cfg.compile(lib_name);
 
@@ -552,6 +557,7 @@ mod bindings {
             .default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
             .disable_nested_struct_naming()
             .generate_cstr(true)
+            .use_core()
             .trust_clang_mangling(false)
             .header(header.clone())
             .parse_callbacks(Box::new(SqliteTypeChooser));
@@ -563,28 +569,28 @@ mod bindings {
                 .raw_line(
                     r#"extern "C" {
     pub fn sqlite3_auto_extension(
-        xEntryPoint: ::std::option::Option<
+        xEntryPoint: ::core::option::Option<
             unsafe extern "C" fn(
                 db: *mut sqlite3,
-                pzErrMsg: *mut *mut ::std::os::raw::c_char,
+                pzErrMsg: *mut *mut ::core::ffi::c_char,
                 _: *const sqlite3_api_routines,
-            ) -> ::std::os::raw::c_int,
+            ) -> ::core::ffi::c_int,
         >,
-    ) -> ::std::os::raw::c_int;
+    ) -> ::core::ffi::c_int;
 }"#,
                 )
                 .blocklist_function("sqlite3_cancel_auto_extension")
                 .raw_line(
                     r#"extern "C" {
     pub fn sqlite3_cancel_auto_extension(
-        xEntryPoint: ::std::option::Option<
+        xEntryPoint: ::core::option::Option<
             unsafe extern "C" fn(
                 db: *mut sqlite3,
-                pzErrMsg: *mut *mut ::std::os::raw::c_char,
+                pzErrMsg: *mut *mut ::core::ffi::c_char,
                 _: *const sqlite3_api_routines,
-            ) -> ::std::os::raw::c_int,
+            ) -> ::core::ffi::c_int,
         >,
-    ) -> ::std::os::raw::c_int;
+    ) -> ::core::ffi::c_int;
 }"#,
                 )
                 .blocklist_function(".*16.*")
@@ -639,21 +645,21 @@ mod bindings {
             .generate()
             .unwrap_or_else(|_| panic!("could not run bindgen on header {header}"));
 
-        #[cfg(feature = "loadable_extension")]
-        {
-            let mut output = Vec::new();
-            bindings
-                .write(Box::new(&mut output))
-                .expect("could not write output of bindgen");
-            let mut output = String::from_utf8(output).expect("bindgen output was not UTF-8?!");
-            super::loadable_extension::generate_functions(&mut output);
-            std::fs::write(out_path, output.as_bytes())
-                .unwrap_or_else(|_| panic!("Could not write to {out_path:?}"));
+        cfg_select! {
+            feature = "loadable_extension" => {
+                let mut output = Vec::new();
+                bindings
+                    .write(Box::new(&mut output))
+                    .expect("could not write output of bindgen");
+                let mut output = String::from_utf8(output).expect("bindgen output was not UTF-8?!");
+                super::loadable_extension::generate_functions(&mut output);
+                std::fs::write(out_path, output.as_bytes())
+                    .unwrap_or_else(|_| panic!("Could not write to {out_path:?}"));
+            }
+            _ => bindings
+                .write_to_file(out_path)
+                .unwrap_or_else(|_| panic!("Could not write to {out_path:?}"))
         }
-        #[cfg(not(feature = "loadable_extension"))]
-        bindings
-            .write_to_file(out_path)
-            .unwrap_or_else(|_| panic!("Could not write to {out_path:?}"));
     }
 }
 
@@ -732,31 +738,31 @@ mod loadable_extension {
             let ty = &method.output;
             let tokens = if "db_config" == name {
                 quote::quote! {
-                    static #ptr_name: ::std::sync::atomic::AtomicPtr<()> = ::std::sync::atomic::AtomicPtr::new(::std::ptr::null_mut());
-                    pub unsafe fn #sqlite3_fn_name(#args arg3: ::std::os::raw::c_int, arg4: *mut ::std::os::raw::c_int) #ty {
-                        let ptr = #ptr_name.load(::std::sync::atomic::Ordering::Acquire);
+                    static #ptr_name: ::core::sync::atomic::AtomicPtr<()> = ::core::sync::atomic::AtomicPtr::new(::core::ptr::null_mut());
+                    pub unsafe fn #sqlite3_fn_name(#args arg3: ::core::ffi::c_int, arg4: *mut ::core::ffi::c_int) #ty {
+                        let ptr = #ptr_name.load(::core::sync::atomic::Ordering::Acquire);
                         assert!(!ptr.is_null(), "SQLite API not initialized");
-                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::std::mem::transmute(ptr);
+                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::core::mem::transmute(ptr);
                         (fun)(#arg_names, arg3, arg4)
                     }
                 }
             } else if "log" == name {
                 quote::quote! {
-                    static #ptr_name: ::std::sync::atomic::AtomicPtr<()> = ::std::sync::atomic::AtomicPtr::new(::std::ptr::null_mut());
-                    pub unsafe fn #sqlite3_fn_name(#args arg3: *const ::std::os::raw::c_char) #ty {
-                        let ptr = #ptr_name.load(::std::sync::atomic::Ordering::Acquire);
+                    static #ptr_name: ::core::sync::atomic::AtomicPtr<()> = ::core::sync::atomic::AtomicPtr::new(::core::ptr::null_mut());
+                    pub unsafe fn #sqlite3_fn_name(#args arg3: *const ::core::ffi::c_char) #ty {
+                        let ptr = #ptr_name.load(::core::sync::atomic::Ordering::Acquire);
                         assert!(!ptr.is_null(), "SQLite API not initialized");
-                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::std::mem::transmute(ptr);
+                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::core::mem::transmute(ptr);
                         (fun)(#arg_names, arg3)
                     }
                 }
             } else {
                 quote::quote! {
-                    static #ptr_name: ::std::sync::atomic::AtomicPtr<()> = ::std::sync::atomic::AtomicPtr::new(::std::ptr::null_mut());
+                    static #ptr_name: ::core::sync::atomic::AtomicPtr<()> = ::core::sync::atomic::AtomicPtr::new(::core::ptr::null_mut());
                     pub unsafe fn #sqlite3_fn_name(#args) #ty {
-                        let ptr = #ptr_name.load(::std::sync::atomic::Ordering::Acquire);
+                        let ptr = #ptr_name.load(::core::sync::atomic::Ordering::Acquire);
                         assert!(!ptr.is_null(), "SQLite API not initialized or SQLite feature omitted");
-                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::std::mem::transmute(ptr);
+                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::core::mem::transmute(ptr);
                         (fun)(#arg_names)
                     }
                 }
@@ -774,7 +780,7 @@ mod loadable_extension {
                 if let Some(fun) = (*#p_api).#ident {
                     #ptr_name.store(
                         fun as usize as *mut (),
-                        ::std::sync::atomic::Ordering::Release,
+                        ::core::sync::atomic::Ordering::Release,
                     );
                 }
             });
@@ -782,7 +788,7 @@ mod loadable_extension {
         // (3) generate rust code similar to SQLITE_EXTENSION_INIT2 macro
         let tokens = quote::quote! {
             /// Like SQLITE_EXTENSION_INIT2 macro
-            pub unsafe fn rusqlite_extension_init2(#p_api: *mut #sqlite3_api_routines_ident) -> ::std::result::Result<(),crate::InitError> {
+            pub unsafe fn rusqlite_extension_init2(#p_api: *mut #sqlite3_api_routines_ident) -> ::core::result::Result<(), crate::InitError> {
                 #(#malloc)* // sqlite3_malloc needed by to_sqlite_error
                 if let Some(fun) = (*#p_api).libversion_number {
                     let version = fun();

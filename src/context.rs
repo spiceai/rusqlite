@@ -1,17 +1,13 @@
 //! Code related to `sqlite3_context` common to `functions` and `vtab` modules.
 
-use libsqlite3_sys::sqlite3_value;
+use crate::ffi::sqlite3_value;
 use std::ffi::c_void;
-#[cfg(feature = "array")]
-use std::rc::Rc;
 
 use crate::ffi;
 use crate::ffi::sqlite3_context;
 
 use crate::str_for_sqlite;
 use crate::types::{ToSqlOutput, ValueRef};
-#[cfg(feature = "array")]
-use crate::vtab::array::{free_array, ARRAY_TYPE};
 
 // This function is inline despite it's size because what's in the ToSqlOutput
 // is often known to the compiler, and thus const prop/DCE can substantially
@@ -35,14 +31,9 @@ pub(super) unsafe fn set_result(
         ToSqlOutput::Arg(i) => {
             return ffi::sqlite3_result_value(ctx, args[i]);
         }
-        #[cfg(feature = "array")]
-        ToSqlOutput::Array(ref a) => {
-            return ffi::sqlite3_result_pointer(
-                ctx,
-                Rc::into_raw(a.clone()) as *mut c_void,
-                ARRAY_TYPE,
-                Some(free_array),
-            );
+        #[cfg(feature = "pointer")]
+        ToSqlOutput::Pointer(ref p) => {
+            return ffi::sqlite3_result_pointer(ctx, p.0 as _, p.1.as_ptr(), p.2);
         }
     };
 
@@ -53,6 +44,7 @@ pub(super) unsafe fn set_result(
         ValueRef::Text(s) => {
             let (c_str, len, destructor) = str_for_sqlite(s);
             ffi::sqlite3_result_text64(ctx, c_str, len, destructor, ffi::SQLITE_UTF8 as _);
+            // TODO SQLITE_UTF8_ZT
         }
         ValueRef::Blob(b) => {
             let length = b.len();

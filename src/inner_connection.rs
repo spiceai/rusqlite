@@ -140,8 +140,10 @@ impl InnerConnection {
         if self.db.is_null() {
             return Ok(());
         }
-        self.remove_hooks();
-        self.remove_preupdate_hook();
+        if self.owned {
+            self.remove_hooks();
+            self.remove_preupdate_hook();
+        }
         let mut shared_handle = self.interrupt_lock.lock().unwrap();
         assert!(
             !self.owned || !shared_handle.is_null(),
@@ -215,39 +217,39 @@ impl InnerConnection {
         };
         let c_sql = sql.as_bytes().as_ptr().cast::<c_char>();
         let mut c_tail: *const c_char = ptr::null();
-        #[cfg(not(feature = "unlock_notify"))]
-        let r = unsafe {
-            ffi::sqlite3_prepare_v3(
-                self.db(),
-                c_sql,
-                len,
-                flags.bits(),
-                &mut c_stmt,
-                &mut c_tail,
-            )
-        };
-        #[cfg(feature = "unlock_notify")]
-        let r = unsafe {
-            use crate::unlock_notify;
-            let mut rc;
-            loop {
-                rc = ffi::sqlite3_prepare_v3(
+        let r = cfg_select! {
+            feature = "unlock_notify" => unsafe {
+                use crate::unlock_notify;
+                let mut rc;
+                loop {
+                    rc = ffi::sqlite3_prepare_v3(
+                        self.db(),
+                        c_sql,
+                        len,
+                        flags.bits(),
+                        &mut c_stmt,
+                        &mut c_tail,
+                    );
+                    if !unlock_notify::is_locked(self.db, rc) {
+                        break;
+                    }
+                    rc = unlock_notify::wait_for_unlock_notify(self.db);
+                    if rc != ffi::SQLITE_OK {
+                        break;
+                    }
+                }
+                rc
+            }
+            _ => unsafe {
+                ffi::sqlite3_prepare_v3(
                     self.db(),
                     c_sql,
                     len,
                     flags.bits(),
                     &mut c_stmt,
                     &mut c_tail,
-                );
-                if !unlock_notify::is_locked(self.db, rc) {
-                    break;
-                }
-                rc = unlock_notify::wait_for_unlock_notify(self.db);
-                if rc != ffi::SQLITE_OK {
-                    break;
-                }
+                )
             }
-            rc
         };
         // If there is an error, *ppStmt is set to NULL.
         if r != ffi::SQLITE_OK {
@@ -273,25 +275,21 @@ impl InnerConnection {
 
     #[inline]
     pub fn changes(&self) -> u64 {
-        #[cfg(not(feature = "modern_sqlite"))]
         unsafe {
-            ffi::sqlite3_changes(self.db()) as u64
-        }
-        #[cfg(feature = "modern_sqlite")] // 3.37.0
-        unsafe {
-            ffi::sqlite3_changes64(self.db()) as u64
+            cfg_select! {
+            feature = "modern_sqlite" => ffi::sqlite3_changes64(self.db()) as u64, // 3.37.0
+            _ => ffi::sqlite3_changes(self.db()) as u64
+            }
         }
     }
 
     #[inline]
     pub fn total_changes(&self) -> u64 {
-        #[cfg(not(feature = "modern_sqlite"))]
         unsafe {
-            ffi::sqlite3_total_changes(self.db()) as u64
-        }
-        #[cfg(feature = "modern_sqlite")] // 3.37.0
-        unsafe {
-            ffi::sqlite3_total_changes64(self.db()) as u64
+            cfg_select! {
+            feature = "modern_sqlite" => ffi::sqlite3_total_changes64(self.db()) as u64,  // 3.37.0
+            _ => ffi::sqlite3_total_changes(self.db()) as u64
+            }
         }
     }
 
@@ -368,6 +366,14 @@ impl InnerConnection {
     #[cfg(feature = "modern_sqlite")] // 3.41.0
     pub fn is_interrupted(&self) -> bool {
         unsafe { ffi::sqlite3_is_interrupted(self.db) == 1 }
+    }
+
+    #[cfg(any(feature = "hooks", feature = "preupdate_hook"))]
+    pub fn check_owned(&self) -> Result<()> {
+        if !self.owned {
+            return Err(err!(ffi::SQLITE_MISUSE, "Connection is not owned"));
+        }
+        Ok(())
     }
 }
 
